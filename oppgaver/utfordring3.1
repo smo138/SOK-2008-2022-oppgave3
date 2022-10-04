@@ -1,0 +1,71 @@
+library(PxWebApiData)
+library(tidyverse)
+install.packages("OECD")
+library(OECD)
+
+#laster inn data
+arbeidsledighet <- ApiData("https://data.ssb.no/api/v0/no/table/11155/",
+                           Alder = c("20-64","15-24"),
+                           Kjonn = "0",
+                           UtdNivaa = "TOT",
+                           ContentsCode = "ArbLedigProsent",
+                           Tid = "2020")
+
+#lager det om til datasett
+arbeidsledighet <- as.tibble(arbeidsledighet[[2]])
+
+#lager prott for alders gruppene også med arbeidsledighet
+ggplot(arbeidsledighet, aes(x = Alder, y = value, fill = Alder)) +
+  geom_col(col = "pink") +
+  labs(title = "Arbeidsledigheti gruppene i 2020 prosentvis",
+       x = "Alders gruppe",
+       y = "Arbeidsledighet")
+
+#oppgave2
+
+#henter inn data
+info<-get_datasets()
+
+
+#filtrer ut minstelønn og land
+minstelønn <- get_dataset("MIN2AVE",
+                       filter = "USA+CAN+FRA+GBR+DEU+NZL", 
+                       pre_formatted = TRUE)
+
+#henter ut årstallene
+minstelønn2019 <- subset(minstelønn, Time < 2019 & Time >2007 & SERIES=="MEDIAN")
+minstelønn2007_2019 <- subset(minstelønn2019, Time>2007)
+
+arbeidsløs <- get_dataset("MIG_NUP_RATES_GENDER",
+                      filter = "USA+CAN+FRA+GBR+DEU+NZL+ENG", 
+                      pre_formatted = TRUE)
+
+arbeidsløs2019 <- subset(arbeidsløs, Time<2019 & RATE=="U_RATE" & BIRTH=="NB" & GENDER=="TOT")
+arbeidsløs2007_2019 <- subset(arbeidsløs2019, Time>2007)
+
+minstelønn_arbeidslønn <-left_join(minstelønn2007_2019, arbeidsløs2007_2019, by=c("COUNTRY","Time"))
+
+#fjere na´s
+full_minstelønn_arbeidsløs <- na.omit(minstelønn_arbeidslønn)
+
+# få det om til tall
+full_minstelønn_arbeidsløs$MinWage_0 <- as.numeric(full_minstelønn_arbeidsløs$ObsValue.x) 
+full_minstelønn_arbeidsløs$UnEmpl <-as.numeric(full_minstelønn_arbeidsløs$ObsValue.y) 
+full_minstelønn_arbeidsløs$MinWage <- full_minstelønn_arbeidsløs$MinWage_0 * 100
+
+
+#lager siste plottet med arbeisløshet og minstelønn for landene 
+minstelønn_plot <- ggplot(data=full_minstelønn_arbeidsløs,aes(x=UnEmpl,y=MinWage, group=COUNTRY, color=COUNTRY)) +
+  geom_line(aes(group=COUNTRY), size=2) +
+  geom_point(size=2.5)+
+  labs(title = "Sammneheng mellom minstelønn og arbeidsledighet",
+       x = "Arbeidsløsheten" , 
+       y ="Minstelønnen")  + 
+  theme(legend.position="none")+
+  geom_label_repel(
+    data=full_minstelønn_arbeidsløs %>% group_by(COUNTRY) %>% 
+      filter(UnEmpl==min(UnEmpl)),
+    aes(UnEmpl, MinWage, fill = factor(COUNTRY), label = sprintf('%s', COUNTRY)),
+    color = "green",
+    fill = "brown")
+minstelønn_plot
